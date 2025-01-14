@@ -21,7 +21,7 @@ env = TimeLimit(
 # Don't modify the methods names and signatures, but you can add methods.
 # ENJOY!
 
-class ReplayBuffer: #OK
+class ReplayBuffer:
   def __init__(self, capacity, device):
     self.capacity = int(capacity) # capacity of the buffer
     self.data = []
@@ -43,21 +43,21 @@ class ReplayBuffer: #OK
 
 
 class ProjectAgent:
-  def __init__(self): #BY ME
+  def __init__(self):
     config = {'nb_actions': env.action_space.n, 
       'learning_rate': 0.001,
       'gamma': 0.97, 
-      'buffer_size': 900000,
+      'buffer_size': 1000000,
       'epsilon_min': 0.01,
-      'epsilon_max': 1.,
-      'epsilon_decay_period': 30000,
+      'epsilon_max': 1,
+      'epsilon_decay_period': 22000,
       'epsilon_delay_decay': 100,
       'batch_size': 810,
-      'gradient_steps': 7,
+      'gradient_steps': 6,
       'update_target_strategy': 'replace', # or 'ema'
-      'update_target_freq': 900,
+      'update_target_freq': 1200,
       'update_target_tau': 0.005,
-      'criterion': torch.nn.SmoothL1Loss()}
+      'criterion': torch.nn.MSELoss()}
     
     self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -104,7 +104,7 @@ class ProjectAgent:
     else:
       return self.greedy_action(self.model, observation)
 
-  def save(self, path): #OK
+  def save(self, path):
     torch.save(self.model.state_dict(), path)
 
   def load(self): 
@@ -129,7 +129,7 @@ class ProjectAgent:
       loss.backward()
       self.optimizer.step() 
 
-  def train(self): #OK
+  def train(self):
 
     previous_val = 0
     max_episode=300
