@@ -1,5 +1,5 @@
 from gymnasium.wrappers import TimeLimit
-from env_hiv.py import HIVPatient
+from env_hiv import HIVPatient
 
 import numpy as np
 import torch
@@ -130,6 +130,7 @@ class ProjectAgent:
       self.optimizer.step() 
 
   def train(self): 
+
     previous_val = 0
     max_episode=300
     
