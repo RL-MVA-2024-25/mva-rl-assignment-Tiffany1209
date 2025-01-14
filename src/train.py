@@ -105,9 +105,11 @@ class ProjectAgent:
       return self.greedy_action(self.model, observation)
 
   def save(self, path):
-    torch.save(self.model.state_dict(), path)
+    self.path = path + "/model.pth"
+    torch.save(self.model.state_dict(), self.path)
 
   def load(self): 
+    self.path = os.getcwd() + "/model.pth"
     self.model.load_state_dict(torch.load("model.pth", map_location=torch.device("cpu")))
     self.model.eval()
 
@@ -185,12 +187,12 @@ class ProjectAgent:
           previous_val = validation_score
           self.best_model = deepcopy(self.model).to(self.device)
           path = os.getcwd()
-          self.save(path + "/model.pth")
+          self.save(path)
         episode_return.append(episode_cum_reward)
         episode_cum_reward = 0
       else:
         state = next_state
     self.model.load_state_dict(self.best_model.state_dict())
     path = os.getcwd()
-    self.save(path + "/model.pth")
+    self.save(path)
     return episode_return
