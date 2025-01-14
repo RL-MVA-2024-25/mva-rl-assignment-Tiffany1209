@@ -1,22 +1,31 @@
 from gymnasium.wrappers import TimeLimit
+from env_hiv.py import HIVPatient
+
 import numpy as np
 import torch
 import torch.nn as nn
 from copy import deepcopy
 import random
-from fast_env import FastHIVPatient
-from evaluate import evaluate_HIV, evaluate_HIV_population
+
 import os
 
-env = TimeLimit(
-    env=FastHIVPatient(domain_randomization=True), max_episode_steps=200
-)  
+from evaluate import evaluate_HIV, evaluate_HIV_population
 
-class ReplayBuffer: 
+env = TimeLimit(
+    env=HIVPatient(domain_randomization=True), max_episode_steps=200
+)  # The time wrapper limits the number of steps in an episode at 200.
+# Now is the floor is yours to implement the agent and train it.
+
+
+# You have to implement your own agent.
+# Don't modify the methods names and signatures, but you can add methods.
+# ENJOY!
+
+class ReplayBuffer:
   def __init__(self, capacity, device):
-    self.capacity = int(capacity) 
+    self.capacity = int(capacity) # capacity of the buffer
     self.data = []
-    self.index = 0 
+    self.index = 0 # index of the next cell to be filled
     self.device = device
   
   def append(self, s, a, r, s_, d):
@@ -32,20 +41,21 @@ class ReplayBuffer:
   def __len__(self):
     return len(self.data)
 
+
 class ProjectAgent:
-  def __init__(self): 
+  def __init__(self):
     config = {'nb_actions': env.action_space.n, 
       'learning_rate': 0.001,
-      'gamma': 0.98, 
-      'buffer_size': 800000,
+      'gamma': 0.97, 
+      'buffer_size': 900000,
       'epsilon_min': 0.01,
       'epsilon_max': 1.,
       'epsilon_decay_period': 30000,
       'epsilon_delay_decay': 100,
-      'batch_size': 600,
-      'gradient_steps': 4,
+      'batch_size': 810,
+      'gradient_steps': 7,
       'update_target_strategy': 'replace', # or 'ema'
-      'update_target_freq': 700,
+      'update_target_freq': 900,
       'update_target_tau': 0.005,
       'criterion': torch.nn.SmoothL1Loss()}
     
@@ -53,30 +63,21 @@ class ProjectAgent:
 
     state_dim = env.observation_space.shape[0]
     n_action = env.action_space.n
-    nb_neurons = 256 
-
+    nb_neurons = 256  
     self.model = torch.nn.Sequential(
-      nn.Linear(state_dim, nb_neurons),
-      nn.ReLU(),
+            nn.Linear(state_dim, nb_neurons),
+            nn.ReLU(),
+            nn.Linear(nb_neurons, nb_neurons),
+            nn.ReLU(),
+            nn.Linear(nb_neurons, nb_neurons),
+            nn.ReLU(),
+            nn.Linear(nb_neurons, nb_neurons),
+            nn.ReLU(),
+            nn.Linear(nb_neurons, nb_neurons),
+            nn.ReLU(),
+            nn.Linear(nb_neurons, n_action)
+        ).to(self.device)
 
-      nn.Linear(nb_neurons, nb_neurons),
-      nn.ReLU(),
-
-      nn.Linear(nb_neurons, nb_neurons),
-      nn.ReLU(),
-
-      nn.Linear(nb_neurons, nb_neurons),
-      nn.ReLU(),
-      
-      nn.Linear(nb_neurons, nb_neurons),
-      nn.ReLU(),
-
-      nn.Linear(nb_neurons, nb_neurons),
-      nn.ReLU(),
-
-      nn.Linear(nb_neurons, n_action)).to(self.device)
-
-          
     self.nb_actions = config['nb_actions']
     self.gamma = config['gamma'] if 'gamma' in config.keys() else 0.95
     self.batch_size = config['batch_size'] if 'batch_size' in config.keys() else 100
@@ -97,23 +98,23 @@ class ProjectAgent:
     self.update_target_tau = config['update_target_tau'] if 'update_target_tau' in config.keys() else 0.005
 
 
-  def act(self, observation, use_random=False): 
+  def act(self, observation, use_random=False):
     if use_random:
       return env.action_space.sample()
     else:
       return self.greedy_action(self.model, observation)
 
-  def save(self, path): 
+  def save(self, path):
     torch.save(self.model.state_dict(), path)
 
   def load(self): 
     self.model.load_state_dict(torch.load("model.pth", map_location=torch.device("cpu")))
     self.model.eval()
 
-  def greedy_action(self, network, state):
-        device = "cuda" if next(network.parameters()).is_cuda else "cpu"
+  def greedy_action(self, myDQN, state):
+        device = "cuda" if next(myDQN.parameters()).is_cuda else "cpu"
         with torch.no_grad():
-            Q = network(torch.Tensor(state).unsqueeze(0).to(device))
+            Q = myDQN(torch.Tensor(state).unsqueeze(0).to(device))
             return torch.argmax(Q).item()
         
   def gradient_step(self):
@@ -121,15 +122,17 @@ class ProjectAgent:
       X, A, R, Y, D = self.memory.sample(self.batch_size)
       QYmax = self.target_model(Y).max(1)[0].detach()
       update = torch.addcmul(R, 1-D, QYmax, value=self.gamma)
+      #update = torch.addcmul(R, self.gamma, 1-D, QYmax)
       QXA = self.model(X).gather(1, A.to(torch.long).unsqueeze(1))
       loss = self.criterion(QXA, update.unsqueeze(1))
       self.optimizer.zero_grad()
       loss.backward()
       self.optimizer.step() 
 
-  def train(self):
+  def train(self): 
     previous_val = 0
-    max_episode=400
+    max_episode=300
+    
     episode_return = []
     episode = 0
     episode_cum_reward = 0
@@ -168,23 +171,25 @@ class ProjectAgent:
       if done or trunc:
         episode += 1
         validation_score = evaluate_HIV(agent=self, nb_episode=5)
-        validation_score_agent_dr = evaluate_HIV_population(agent=self, nb_episode=20)
+        validation_score_dr = evaluate_HIV_population(agent=self, nb_episode=20)
         print("Episode ", '{:3d}'.format(episode), 
           ", epsilon ", '{:6.2f}'.format(epsilon), 
           ", batch size ", '{:5d}'.format(len(self.memory)), 
           ", episode return ", '{:4.1f}'.format(episode_cum_reward),
           ", validation score ", '{:4.1f}'.format(validation_score),
-          ", validation_score_agent_dr ", '{:4.1f}'.format(validation_score_agent_dr),
+          ", validation score dr ", '{:4.1f}'.format(validation_score_dr),
           sep='')
         state, _ = env.reset()
         if validation_score > previous_val:
           previous_val = validation_score
           self.best_model = deepcopy(self.model).to(self.device)
-          self.save("model.pth")
+          path = os.getcwd()
+          self.save(path + "model.pth")
         episode_return.append(episode_cum_reward)
         episode_cum_reward = 0
       else:
         state = next_state
     self.model.load_state_dict(self.best_model.state_dict())
-    self.save("model.pth")
+    path = os.getcwd()
+    self.save(path + "model.pth")
     return episode_return
