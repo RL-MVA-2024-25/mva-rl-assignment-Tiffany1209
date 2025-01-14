@@ -1,5 +1,5 @@
 from gymnasium.wrappers import TimeLimit
-from fast_env import FastHIVPatient
+from env_hiv import HIVPatient
 
 import numpy as np
 import torch
@@ -12,7 +12,7 @@ import os
 from evaluate import evaluate_HIV, evaluate_HIV_population
 
 env = TimeLimit(
-    env=FastHIVPatient(domain_randomization=True), max_episode_steps=200
+    env=HIVPatient(domain_randomization=True), max_episode_steps=200
 )  # The time wrapper limits the number of steps in an episode at 200.
 # Now is the floor is yours to implement the agent and train it.
 
@@ -47,17 +47,17 @@ class ProjectAgent:
     config = {'nb_actions': env.action_space.n, 
       'learning_rate': 0.001,
       'gamma': 0.97, 
-      'buffer_size': 1000000,
+      'buffer_size': 900000,
       'epsilon_min': 0.01,
-      'epsilon_max': 1,
-      'epsilon_decay_period': 22000,
+      'epsilon_max': 1.,
+      'epsilon_decay_period': 30000,
       'epsilon_delay_decay': 100,
       'batch_size': 810,
-      'gradient_steps': 6,
+      'gradient_steps': 7,
       'update_target_strategy': 'replace', # or 'ema'
-      'update_target_freq': 1200,
+      'update_target_freq': 900,
       'update_target_tau': 0.005,
-      'criterion': torch.nn.MSELoss()}
+      'criterion': torch.nn.SmoothL1Loss()}
     
     self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -98,7 +98,7 @@ class ProjectAgent:
     self.update_target_tau = config['update_target_tau'] if 'update_target_tau' in config.keys() else 0.005
 
 
-  def act(self, observation, use_random=False): #BY ME
+  def act(self, observation, use_random=False):
     if use_random:
       return env.action_space.sample()
     else:
@@ -129,7 +129,7 @@ class ProjectAgent:
       loss.backward()
       self.optimizer.step() 
 
-  def train(self):
+  def train(self): 
 
     previous_val = 0
     max_episode=300
@@ -185,12 +185,12 @@ class ProjectAgent:
           previous_val = validation_score
           self.best_model = deepcopy(self.model).to(self.device)
           path = os.getcwd()
-          self.save(path + "model.pth")
+          self.save(path + "/model.pth")
         episode_return.append(episode_cum_reward)
         episode_cum_reward = 0
       else:
         state = next_state
     self.model.load_state_dict(self.best_model.state_dict())
     path = os.getcwd()
-    self.save(path + "model.pth")
+    self.save(path + "/model.pth")
     return episode_return
